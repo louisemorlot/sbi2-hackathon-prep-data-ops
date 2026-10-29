@@ -1,0 +1,7 @@
+cff-version: 1.2.0
+message: "Please cite the source datasets listed in docs/DATASETS.md."
+title: "SBI2 Hackathon Data Preparation"
+type: software
+authors:
+  - name: "SBI2 Hackathon organizers"
+license: MIT
