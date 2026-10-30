@@ -5,6 +5,7 @@ Download and stage the processed Altair, CellPaint-POSH, and Aconcagua profiles 
 ## What the default bundle includes
 
 - **Altair, A549:** guide-level phase profiles, small metadata files, and the guide-level marker profile archive used for phase-versus-fluorescence work.
+- **Altair Biohub_OPS0077, A549:** 10 screen-specific guide-by-screen profiles for the 4i multiplex fluorescence panel, extracted from the Altair marker archive.
 - **CellPaint-POSH, A549:** the published 124-gene morphology profile table from Zenodo.
 - **Aconcagua, HeLa:** processed interphase and mitotic aggregate H5AD profiles plus experimental metadata, feature definitions, and guide/perturbation library.
 
@@ -13,6 +14,8 @@ The Aconcagua OPS Explorer bucket publishes interphase and mitotic aggregate H5A
 The 1.5 GB POSH `well_normalized_profiles.pq` present elsewhere in the parent workspace has no recorded source URL. The repository instead downloads the source-identified processed POSH tables from the POSH Zenodo record; see the reconciliation note in `docs/DATASETS.md`.
 
 See [dataset inventory and sizes](docs/DATASETS.md) for source links, row level, contents, and size accounting. See [VM staging](docs/AWS_VM.md) for the shared-volume workflow.
+
+For the tested Biohub_OPS0077/4i subset, see [download and QC results](docs/OPS0077_QC.md).
 
 ## Quick start
 
@@ -34,9 +37,13 @@ python scripts/download_data.py --preset core --data-dir ./data
 python scripts/run_quality_checks.py --data-dir ./data --outdir ./reports/qc
 ```
 
-`core` stages files relevant to the planned analyses. `full` also stages the published POSH MoA-300 and Druggable Genome-1640 processed tables. The downloader prompts before writing unless `--yes` is supplied. Re-running it reuses complete files and checks known sizes and checksums. A SHA-256 download manifest is written after a successful run.
+For a partial transfer or a dataset-specific spot check, add `--allow-incomplete`; missing core files are still listed in the report.
 
-An entry-point notebook is available at `notebooks/00_download_preview_and_qc.ipynb`. It previews by default; set `RUN_DOWNLOAD = True` in the designated cell after reviewing the plan.
+`core` stages files relevant to the planned analyses. It also extracts the Biohub_OPS0077 guide-by-screen profiles from `markers_guide.zip`; these add about 92 MiB of local storage but no additional source download. `full` also stages the published POSH MoA-300 and Druggable Genome-1640 processed tables. The downloader prompts before writing unless `--yes` is supplied. Re-running it reuses complete files and checks known sizes and checksums. A SHA-256 download manifest is written after a successful run.
+
+Participants should use `notebooks/01_download_data_started.ipynb` to choose dataset groups, preview current sizes, download, and run first-pass QC. Install the environment first with `python -m pip install -r requirements.txt` from the repository root. The older `00_download_preview_and_qc.ipynb` is an administrative preview/QC entry point.
+
+To stage just the Biohub_OPS0077 profile subset, use `python scripts/download_data.py --only-ops0077-4i --data-dir ./data --dry-run` and then rerun without `--dry-run`. The upstream release does not publish these ZIP members at standalone URLs, so this mode downloads the marker ZIP and extracts the 10 relevant guide-by-screen profiles.
 
 ## Output layout
 

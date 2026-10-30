@@ -7,7 +7,6 @@ import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-import re
 import zipfile
 
 GENE_FIELDS = ("gene_symbol", "target_gene", "gene_name", "target", "gene")
@@ -54,11 +53,17 @@ def inspect_h5ad(path: Path, known_genes: set[str] | None = None) -> dict:
     obs = data.obs
     gene_field, matched = best_gene_field(obs, known_genes)
     genes = normalize(obs[gene_field].dropna()) if gene_field else set()
+    screen_cols = [c for c in obs.columns if "screen" in str(c).lower() or "experiment" in str(c).lower()]
+    screen_values = {}
+    for col in screen_cols:
+        values = obs[col].dropna().astype(str).unique()[:50]
+        screen_values[str(col)] = list(map(str, values))
     result = {"format": "H5AD", "observations": int(data.n_obs), "features": int(data.n_vars),
               "obs_columns": list(map(str, obs.columns)), "var_columns": list(map(str, data.var.columns)),
               "gene_field": str(gene_field) if gene_field is not None else None,
               "unique_gene_labels": len(genes) if gene_field else None,
               "gene_labels_matching_library": matched,
+              "screen_metadata_values_sample": screen_values,
               "duplicate_observation_names": int(obs.index.duplicated().sum()),
               "duplicate_feature_names": int(data.var.index.duplicated().sum())}
     data.file.close()
@@ -90,10 +95,32 @@ def inspect_parquet(path: Path, known_genes: set[str] | None = None) -> dict:
     return result
 
 
+def guide_target_map(path: Path) -> tuple[dict[str, str], list[str]]:
+    import anndata as ad
+    data = ad.read_h5ad(path, backed="r")
+    obs = data.obs
+    guide_field = next((c for c in ["guide", "sgRNA", "Metadata_sgRNA", "barcode", "guide_id"]
+                        if c in obs.columns), None)
+    target_field = next((c for c in ["target_gene", "gene", "gene_name", "Metadata_Gene"]
+                         if c in obs.columns), None)
+    if guide_field is None or target_field is None:
+        data.file.close()
+        raise ValueError(f"Missing guide or target field in {path.name}; columns={list(obs.columns)}")
+    pairs = obs[[guide_field, target_field]].dropna().astype(str)
+    targets_by_guide = pairs.groupby(guide_field)[target_field].agg(lambda values: sorted(set(values)))
+    conflicting = sorted(guide for guide, targets in targets_by_guide.items() if len(targets) > 1)
+    mapping = {guide: targets[0] for guide, targets in targets_by_guide.items()}
+    data.file.close()
+    return mapping, conflicting
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-dir", default="data")
     parser.add_argument("--outdir", help="Defaults to <data-dir>/qc")
+    parser.add_argument("--allow-incomplete", action="store_true",
+                        help="Report missing core files without returning failure (useful for checking a partial staging run).")
+    parser.add_argument("--phase-reference-file", help="Optional Altair phase H5AD used for guide-overlap checks; defaults to <data-dir>/altair/phase_guide.h5ad.")
     args = parser.parse_args()
     root = Path(args.data_dir).expanduser().resolve()
     out = Path(args.outdir).expanduser().resolve() if args.outdir else root / "qc"
@@ -122,7 +149,15 @@ def main() -> int:
         "aconcagua/mitotic_aggregated_data.h5ad", "aconcagua/metadata/experimental_metadata.yaml",
         "aconcagua/metadata/feature_definitions.csv", "aconcagua/metadata/perturbation_library.csv",
     ]
+    ops0077_profiles = [
+        "b-catenin", "c-myc", "gh2ax", "nfkb", "p21", "p53", "prb", "ps6", "rb", "rsp6",
+    ]
+    expected_core.extend(f"altair/ops0077_4i/{marker}_guide_x_screen.h5ad" for marker in ops0077_profiles)
     report["missing_core_files"] = [relative for relative in expected_core if not (root / relative).is_file()]
+    report["Biohub_OPS0077_4i"] = {"mapped_experiment": "ops0144_20260406",
+                                    "expected_guide_by_screen_profiles": len(ops0077_profiles),
+                                    "profiles_found": sum((root / "altair" / "ops0077_4i" / f"{marker}_guide_x_screen.h5ad").is_file()
+                                                          for marker in ops0077_profiles)}
     gene_sets: dict[str, set[str]] = {}
     for path in files:
         rel = str(path.relative_to(root))
@@ -147,6 +182,15 @@ def main() -> int:
                 item["format"] = "YAML"
             if "_gene_symbols" in item:
                 gene_sets[rel] = set(item.pop("_gene_symbols"))
+            if rel.startswith("altair/ops0077_4i/") and path.suffix == ".h5ad":
+                item["expected_experiment_id"] = "ops0144_20260406"
+                item["biohub_dataset_id"] = "Biohub_OPS0077"
+                screen_columns = [c for c in item.get("obs_columns", [])
+                                  if "screen" in str(c).lower() or "experiment" in str(c).lower()]
+                item["screen_metadata_columns"] = screen_columns
+                screen_evidence = json.dumps(item.get("screen_metadata_values_sample", {})).lower()
+                item["experiment_id_in_screen_metadata"] = ("ops0144_20260406" in screen_evidence or
+                                                             "biohub_ops0077" in screen_evidence)
             if item.get("size_bytes", 0) == 0:
                 item["error"] = "empty file"
         except Exception as exc:
@@ -159,6 +203,28 @@ def main() -> int:
             shared = sorted(gene_sets[left] & gene_sets[right])
             report["gene_overlap"][f"{left} vs {right}"] = {"shared_count": len(shared), "examples": shared[:50]}
 
+    phase_path = (Path(args.phase_reference_file).expanduser().resolve() if args.phase_reference_file
+                  else root / "altair" / "phase_guide.h5ad")
+    ops0077_paths = sorted((root / "altair" / "ops0077_4i").glob("*_guide_x_screen.h5ad"))
+    if phase_path.is_file() and ops0077_paths:
+        phase_map, phase_conflicts = guide_target_map(phase_path)
+        profile_overlaps = {}
+        for path in ops0077_paths:
+            target_map, target_conflicts = guide_target_map(path)
+            shared = set(phase_map) & set(target_map)
+            mismatches = sorted(guide for guide in shared if phase_map[guide] != target_map[guide])
+            profile_overlaps[path.name] = {
+                "phase_unique_guides": len(phase_map), "4i_unique_guides": len(target_map),
+                "shared_guides": len(shared), "phase_only_guides": len(set(phase_map) - set(target_map)),
+                "4i_only_guides": len(set(target_map) - set(phase_map)),
+                "shared_guides_with_target_mismatch": len(mismatches),
+                "phase_guides_with_internal_target_conflicts": len(phase_conflicts),
+                "4i_guides_with_internal_target_conflicts": len(target_conflicts),
+                "target_mismatch_examples": mismatches[:10],
+            }
+        report["Biohub_OPS0077_4i"]["guide_overlap_vs_altair_phase"] = profile_overlaps
+        report["Biohub_OPS0077_4i"]["phase_reference_file"] = str(phase_path)
+
     out.mkdir(parents=True, exist_ok=True)
     report_path = out / "quality_report.json"
     report_path.write_text(json.dumps(report, indent=2, default=str) + "\n")
@@ -168,7 +234,7 @@ def main() -> int:
                       "total_bytes": total, "inspection_errors": errors,
                       "missing_core_files": report["missing_core_files"],
                       "gene_overlap_pairs": len(report["gene_overlap"])}, indent=2))
-    return 1 if errors or report["missing_core_files"] else 0
+    return 1 if errors or (report["missing_core_files"] and not args.allow_incomplete) else 0
 
 
 if __name__ == "__main__":
