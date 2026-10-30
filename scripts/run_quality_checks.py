@@ -120,7 +120,7 @@ def main() -> int:
     parser.add_argument("--outdir", help="Defaults to <data-dir>/qc")
     parser.add_argument("--allow-incomplete", action="store_true",
                         help="Report missing core files without returning failure (useful for checking a partial staging run).")
-    parser.add_argument("--phase-reference-file", help="Optional Altair phase H5AD used for guide-overlap checks; defaults to <data-dir>/altair/phase_guide.h5ad.")
+    parser.add_argument("--phase-reference-file", help="Optional single Altair phase H5AD to use for guide-overlap checks; by default checks both phase_guide.h5ad and phase_guide_x_screen.h5ad when present.")
     args = parser.parse_args()
     root = Path(args.data_dir).expanduser().resolve()
     out = Path(args.outdir).expanduser().resolve() if args.outdir else root / "qc"
@@ -143,7 +143,7 @@ def main() -> int:
 
     files = sorted(p for p in root.rglob("*") if p.is_file() and ".part" not in p.name and "qc" not in p.parts)
     expected_core = [
-        "altair/phase_guide.h5ad", "altair/markers_guide.zip", "altair/screen_map.csv",
+        "altair/phase_guide.h5ad", "altair/phase_guide_x_screen.h5ad", "altair/markers_guide.zip", "altair/screen_map.csv",
         "altair/unexpressed_genes.csv", "altair/markers.csv", "altair/manifest.csv",
         "posh/morphology_124.pq", "aconcagua/interphase_aggregated_data.h5ad",
         "aconcagua/mitotic_aggregated_data.h5ad", "aconcagua/metadata/experimental_metadata.yaml",
@@ -203,27 +203,31 @@ def main() -> int:
             shared = sorted(gene_sets[left] & gene_sets[right])
             report["gene_overlap"][f"{left} vs {right}"] = {"shared_count": len(shared), "examples": shared[:50]}
 
-    phase_path = (Path(args.phase_reference_file).expanduser().resolve() if args.phase_reference_file
-                  else root / "altair" / "phase_guide.h5ad")
+    phase_paths = ([Path(args.phase_reference_file).expanduser().resolve()] if args.phase_reference_file else
+                   [root / "altair" / "phase_guide.h5ad", root / "altair" / "phase_guide_x_screen.h5ad"])
     ops0077_paths = sorted((root / "altair" / "ops0077_4i").glob("*_guide_x_screen.h5ad"))
-    if phase_path.is_file() and ops0077_paths:
-        phase_map, phase_conflicts = guide_target_map(phase_path)
-        profile_overlaps = {}
-        for path in ops0077_paths:
-            target_map, target_conflicts = guide_target_map(path)
-            shared = set(phase_map) & set(target_map)
-            mismatches = sorted(guide for guide in shared if phase_map[guide] != target_map[guide])
-            profile_overlaps[path.name] = {
-                "phase_unique_guides": len(phase_map), "4i_unique_guides": len(target_map),
-                "shared_guides": len(shared), "phase_only_guides": len(set(phase_map) - set(target_map)),
-                "4i_only_guides": len(set(target_map) - set(phase_map)),
-                "shared_guides_with_target_mismatch": len(mismatches),
-                "phase_guides_with_internal_target_conflicts": len(phase_conflicts),
-                "4i_guides_with_internal_target_conflicts": len(target_conflicts),
-                "target_mismatch_examples": mismatches[:10],
-            }
-        report["Biohub_OPS0077_4i"]["guide_overlap_vs_altair_phase"] = profile_overlaps
-        report["Biohub_OPS0077_4i"]["phase_reference_file"] = str(phase_path)
+    if ops0077_paths:
+        for phase_path in phase_paths:
+            if not phase_path.is_file():
+                continue
+            phase_map, phase_conflicts = guide_target_map(phase_path)
+            profile_overlaps = {}
+            for path in ops0077_paths:
+                target_map, target_conflicts = guide_target_map(path)
+                shared = set(phase_map) & set(target_map)
+                mismatches = sorted(guide for guide in shared if phase_map[guide].upper() != target_map[guide].upper())
+                profile_overlaps[path.name] = {
+                    "phase_unique_guides": len(phase_map), "4i_unique_guides": len(target_map),
+                    "shared_guides": len(shared), "phase_only_guides": len(set(phase_map) - set(target_map)),
+                    "4i_only_guides": len(set(target_map) - set(phase_map)),
+                    "shared_guides_with_target_mismatch": len(mismatches),
+                    "phase_guides_with_internal_target_conflicts": len(phase_conflicts),
+                    "4i_guides_with_internal_target_conflicts": len(target_conflicts),
+                    "target_mismatch_examples": mismatches[:10],
+                }
+            key = "guide_overlap_vs_" + phase_path.stem.replace("phase_", "altair_phase_")
+            report["Biohub_OPS0077_4i"][key] = profile_overlaps
+        report["Biohub_OPS0077_4i"]["phase_reference_files"] = [str(p) for p in phase_paths if p.is_file()]
 
     out.mkdir(parents=True, exist_ok=True)
     report_path = out / "quality_report.json"

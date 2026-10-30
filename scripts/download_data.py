@@ -19,11 +19,14 @@ ZENODO_BASE = "https://zenodo.org/api/records/17470307/files"
 USER_AGENT = "sbi2-hackathon-prep-data-ops/1.0 (+public dataset staging)"
 ALT_SHA256 = {
     "phase_guide.h5ad": "8cffb86078d6ed9839821b9176c4ef744f1b9b35386b7710794e607188d7b985",
+    "phase_guide_x_screen.h5ad": "3f1ae51ff5958b62c16c539160ae0cc5f51c91b5445659cfdf1dc6142f36e976",
     "screen_map.csv": "9dbd0486fbb685403ec26eff87dc12bb06e7ac773a2a0428ad3ff3482ad3d509",
     "unexpressed_genes.csv": "7ca185b0bc4b6f4c0f50f517846e9bd783ca0f61ad19fde04ac6ea4367b16acc",
     "markers_guide.zip": "8a7257138d26c2dfec7414c17ef9f3fee27f64e6b1f7178a957ea78c24311930",
 }
-ALT_SIZE_HINTS = {"screen_map.csv": 8_346, "unexpressed_genes.csv": 1_585,
+ALT_SIZE_HINTS = {"phase_guide.h5ad": 47_992_569,
+                  "phase_guide_x_screen.h5ad": 3_132_434_691,
+                  "screen_map.csv": 8_346, "unexpressed_genes.csv": 1_585,
                   "markers.csv": 6_249, "manifest.csv": 7_872,
                   "markers_guide.zip": 2_037_832_363}
 POSH_SIZE_HINTS = {"morphology_124.pq": 4_686_984, "moa_300.pq": 31_421_848,
@@ -31,12 +34,14 @@ POSH_SIZE_HINTS = {"morphology_124.pq": 4_686_984, "moa_300.pq": 31_421_848,
 ACON_METADATA_SIZE_HINTS = {"experimental_metadata.yaml": 1_967,
                              "feature_definitions.csv": 168_230,
                              "perturbation_library.csv": 1_639_239}
+ACON_PROFILE_SIZE_HINTS = {"interphase": 5_428_564, "mitotic": 5_423_724}
 
 
 def objects(full: bool) -> list[dict]:
     items = []
     altair_groups = {
         "phase_guide.h5ad": ["altair-phase"],
+        "phase_guide_x_screen.h5ad": ["altair-phase"],
         "screen_map.csv": ["altair-phase", "altair-4i"],
         "unexpressed_genes.csv": ["altair-phase"],
         "markers.csv": ["altair-4i"],
@@ -48,7 +53,8 @@ def objects(full: bool) -> list[dict]:
                       "path": f"altair/{name}", "sha256": ALT_SHA256.get(name),
                       "size_hint_bytes": ALT_SIZE_HINTS.get(name),
                       "groups": groups,
-                      "description": "Guide-level phase profiles" if name == "phase_guide.h5ad" else
+                      "description": "One phase profile per guide" if name == "phase_guide.h5ad" else
+                      "One phase profile per guide and screen" if name == "phase_guide_x_screen.h5ad" else
                       "Guide-level and guide-by-screen fluorescence profiles" if name == "markers_guide.zip" else
                       "Altair release metadata"})
     for name in ["morphology_124.pq"] + (["moa_300.pq", "druggable_genome_1640.pq"] if full else []):
@@ -62,6 +68,7 @@ def objects(full: bool) -> list[dict]:
                       "url": f"{ACON_BASE}/visualizations/{name}/aggregated_data.h5ad",
                       "path": f"aconcagua/{name}_aggregated_data.h5ad", "sha256": None,
                       "groups": ["aconcagua"],
+                      "size_hint_bytes": ACON_PROFILE_SIZE_HINTS[name],
                       "description": f"Gene/perturbation aggregate H5AD; {name} population"})
     for name in ["experimental_metadata.yaml", "feature_definitions.csv", "perturbation_library.csv"]:
         items.append({"dataset": "Aconcagua metadata", "name": name,

@@ -1,6 +1,6 @@
-# SBI2 Hackathon: processed imaging data starter
+# Cytodata Hackathon at SBI2: processed imaging data starter
 
-This repository stages processed phenotypic profiles for the SBI2 hackathon. It includes guide-level phase and fluorescence profiles from Altair, processed morphology profiles from POSH, and aggregate profiles from Aconcagua. The data are intended for participant analysis on a shared AWS VM; the scripts download only the selected processed tables and metadata, not raw microscopy images.
+This repository stages processed phenotypic profiles for the Cytodata hackathon at SBI2 2026. It includes guide-level phase and fluorescence profiles from Altair, processed morphology profiles from POSH, and aggregate profiles from Aconcagua. The scripts download only the selected processed tables and metadata, not raw microscopy images.
 
 The starter flow is modeled on the [Cytodata hackathon prep OPS repository](https://github.com/timtreis/cytodata-hackathon-prep-ops): preview what will be fetched, download selected data, run first-pass checks, then explore profile overlap before designing an analysis.
 
@@ -11,20 +11,20 @@ The starter flow is modeled on the [Cytodata hackathon prep OPS repository](http
 3. Run [`notebooks/02_data_inventory_and_overlap.ipynb`](notebooks/09_preflight_dataset_inventory_and_overlap.ipynb) to inventory staged files, inspect schemas, compare Altair phase and 4i guide identifiers, and measure candidate gene overlap. It also works with a partial download.
 4. For a compact administrative integrity/schema report, run `python scripts/run_quality_checks.py --data-dir data --allow-incomplete`. The report and the downloader's `data/download_manifest.json` help the VM operator confirm what was staged.
 
-All data files are excluded from Git. Keep the code, notebooks, and descriptive metadata in the public repository; stage the downloaded data on the VM's mounted storage. For VM setup, see [`docs/AWS_VM.md`](docs/AWS_VM.md). For exact object inventory and source byte counts, see [`docs/DATASETS.md`](docs/DATASETS.md).
+For VM setup, see [`docs/AWS_VM.md`](docs/AWS_VM.md). For exact object inventory and source byte counts, see [`docs/DATASETS.md`](docs/DATASETS.md).
 
 ## Dataset overview
 
-The default `core` download is approximately **2.10 billion bytes (1.96 GiB) transferred**. Extracting the 10 OPS0077 guide-by-screen H5AD profiles adds about **96.3 MB (91.9 MiB)** of local files from the already-downloaded marker archive, for approximately **2.20 billion bytes (2.05 GiB) of staged content**. These are measured source sizes; the downloader checks live sizes where possible and records actual downloaded sizes and SHA-256 checksums in its manifest.
+The default `core` download is approximately **5,235,632,383 bytes (5.24 GB / 4.88 GiB) transferred**. This includes the per-guide phase profile and the much larger per-guide-per-screen phase profile. Extracting the 10 OPS0077 guide-by-screen H5AD profiles adds about **96.3 MB (91.9 MiB)** from the already-downloaded marker archive, for approximately **5,331,946,566 bytes (5.33 GB / 4.97 GiB) of staged content**. These are measured source sizes; the downloader checks live sizes where possible and records actual downloaded sizes and SHA-256 checksums in its manifest.
 
 | Dataset | Screen and experimental context | Downloaded processed data | Approximate size |
 |---|---|---|---:|
-| **Altair phase** | A549 optical pooled CRISPR perturbation screen. Phase-contrast phenotypes are summarized per guide; screen and guide annotations accompany the profile. | `phase_guide.h5ad`, screen map, unexpressed-gene metadata | 48.0 MB (45.8 MiB) |
+| **Altair phase** | A549 optical pooled CRISPR perturbation screen. Includes one phase profile per guide (median of screen medians) and one per guide and screen (median over cells). | `phase_guide.h5ad`, `phase_guide_x_screen.h5ad`, screen map, unexpressed-gene metadata | 48.0 MB + 3.13 GB (2.92 GiB) + metadata |
 | **Altair Biohub_OPS0077 4i** | Altair's Biohub_OPS0077 screen maps to experiment `ops0144_20260406`. The four-dimensional imaging assay includes ten antibody marker readouts: β-catenin, c-Myc, γH2AX, NFκB, p21, p53, pRB, pS6, RB, and RPS6. | Marker archive plus ten extracted guide-by-screen H5AD profiles and marker/manifest metadata | 2.04 GB (1.90 GiB) transfer; extracted profiles 96.3 MB (91.9 MiB) |
 | **POSH morphology-124** | A549 CRISPR imaging screen with processed cell-painting morphology profiles for a 124-gene subset. | Zenodo `morphology_124.pq` Parquet profile table | 4.69 MB (4.47 MiB) |
 | **Aconcagua** | HeLa optical pooled CRISPR screen. Public aggregate profiles are provided separately for interphase and mitotic populations; experiment metadata, feature definitions, and the perturbation library support interpretation. | Two `aggregated_data.h5ad` files plus three metadata files | 10.9 MB profiles and 1.81 MB metadata (about 12.7 MB total) |
 
-Altair's marker archive is large because it contains many profile and sampled-cell files. Only the ten guide-by-screen profiles for the selected Biohub_OPS0077 experiment are extracted into `data/altair/ops0077_4i/`; no extra network transfer is needed for those profiles. Individual sampled-cell files are not part of this starter bundle. Aconcagua's raw `cell_data.parquet` (about 323 GB in the inspected public inventory) and raw/image data are excluded. POSH's optional MoA-300 and Druggable Genome-1640 profile tables can be added with `--preset full`; see the inventory for sizes.
+Altair is an A549 optical pooled CRISPR screen of 1,000 knockout targets, each with four guides, plus 211 non-targeting guides, across 88 separate screens. Phase and fluorescence measurements within a screen come from the same cells; cells are not shared across screens. Altair's marker archive is large because it contains marker-level profiles and sampled-cell files. The additional `phase_guide_x_screen.h5ad` is about 3.13 GB and has one observation per guide and screen, enabling screen-to-screen variation checks and avoiding aggregation across screens. Only the ten guide-by-screen profiles for the selected Biohub_OPS0077 experiment are extracted into `data/altair/ops0077_4i/`; no extra network transfer is needed for those profiles. Individual sampled-cell files are not part of this starter bundle. Aconcagua's raw `cell_data.parquet` (about 323 GB in the inspected public inventory) and raw/image data are excluded. POSH's optional MoA-300 and Druggable Genome-1640 profile tables can be added with `--preset full`; see the inventory for sizes.
 
 ## What can be compared?
 
@@ -33,7 +33,7 @@ Altair's marker archive is large because it contains many profile and sampled-ce
 - **Altair/POSH and Aconcagua:** cross-atlas conservation can be explored for shared target genes, but Aconcagua uses HeLa cells while Altair and POSH use A549. Aconcagua's downloaded matrices are gene/perturbation aggregates, not guide-level profiles; the perturbation library cannot recover guide-specific phenotypes from an already aggregated profile. Treat agreement as a cross-cell-line, cross-assay hypothesis, not a direct replicate.
 - **Feature overlap:** feature names and units are assay-specific. A matching feature label alone does not guarantee equivalent measurements. Normalize and compare within each dataset first, then compare target-level effects or representation similarity with assay-aware methods.
 
-The exact overlaps depend on the particular staged files and identifier columns. `02_data_inventory_and_overlap.ipynb` reports measured overlaps from the files available in `SBI2_DATA_DIR` (or `data/` by default); it does not infer missing values or download files.
+The exact overlaps depend on the particular staged files and identifier columns. `09_preflight_dataset_inventory_and_overlap.ipynb` reports measured overlaps from the files available in `SBI2_DATA_DIR` (or `data/` by default); it does not infer missing values or download files.
 
 ## File layout
 
@@ -41,6 +41,7 @@ The exact overlaps depend on the particular staged files and identifier columns.
 data/
   altair/
     phase_guide.h5ad
+    phase_guide_x_screen.h5ad
     screen_map.csv
     unexpressed_genes.csv
     markers.csv
@@ -50,8 +51,8 @@ data/
   posh/
     morphology_124.pq
   aconcagua/
-    interphase/aggregated_data.h5ad
-    mitotic/aggregated_data.h5ad
+    interphase_aggregated_data.h5ad
+    mitotic_aggregated_data.h5ad
     metadata/
       experimental_metadata.yaml
       feature_definitions.csv

@@ -14,6 +14,10 @@ The actual OPS0077-only download completed and matched the release manifest:
 
 The marker inventory lists ten readouts for this experiment: b-catenin, c-myc, γH2AX, NFκB, p21, p53, pRB, pS6, RB, and RPS6. The processed guide profiles are small. The separate sampled cell-level marker files are approximately 1.2–1.6 GB each and are not included in this subset.
 
+## Additional Altair phase profile
+
+The release also provides `phase_guide_x_screen.h5ad`, one phase profile per guide and screen. Its size is 3,132,434,691 bytes (2.92 GiB), and its release SHA-256 is `3f1ae51ff5958b62c16c539160ae0cc5f51c91b5445659cfdf1dc6142f36e976`. It is included in the `altair-phase` download group. The updated QC script and preflight notebook compare the distinct guide/target mappings in this table against both phase summaries and the OPS0077 marker profiles. This per-screen file has not been downloaded into this repository's current local `data/` directory, so no observed per-screen comparison results are claimed here.
+
 ## Profile checks
 
 All ten extracted H5AD files opened successfully with AnnData and report `experiment=ops0144_20260406`. Each profile contains 4,208 observations (unique guide records), with no duplicate observation or feature names. b-catenin and c-myc have 436 features each; the other eight profiles have 657 features each. Profiles are marked fluorescent and use channels named `4i_r4_<marker>`.

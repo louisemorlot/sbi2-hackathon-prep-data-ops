@@ -4,20 +4,23 @@ Object sizes below are source object sizes observed on 2026-10-29 where availabl
 
 ## Default `core` bundle
 
+Altair uses A549 cells with inducible Cas9 and 88 screens. The library targets 1,000 genes with four guides each, plus 211 non-targeting guides. Phase and marker measurements within a screen come from the same cells; different screens use different cells. `phase_guide.h5ad` aggregates screen medians per guide, while `phase_guide_x_screen.h5ad` retains a separate profile per guide and screen.
+
 | Dataset | File(s) | Contents / unit | Source size | Download destination |
 |---|---|---|---:|---|
-| Altair | `phase_guide.h5ad` | A549 phase-imaging profile, guide-level; metadata and feature matrix | 47,992,569 B (45.8 MiB) | `altair/` |
+| Altair | `phase_guide.h5ad` | A549 phase-imaging profile; one profile per guide (median of per-screen medians) | 47,992,569 B (45.8 MiB) | `altair/` |
+| Altair | `phase_guide_x_screen.h5ad` | A549 phase-imaging profile; one profile per guide and screen, median over cells | 3,132,434,691 B (2.92 GiB) | `altair/` |
 | Altair | `markers_guide.zip` | Guide-level fluorescence marker profiles and guide-by-screen profiles for marker assays | 2,037,832,363 B (1.90 GiB) | `altair/` |
 | Altair Biohub_OPS0077 / 4i | Ten `*_guide_x_screen.h5ad` files for b-catenin, c-myc, γH2AX, NFκB, p21, p53, pRB, pS6, RB, and RPS6 | Screen-specific guide-by-screen profiles for experiment `ops0144_20260406`; extracted from the marker ZIP | 96,314,183 B (91.85 MiB) uncompressed; no additional network bytes beyond the ZIP | `altair/ops0077_4i/` |
 | Altair metadata | `screen_map.csv`, `unexpressed_genes.csv`, `markers.csv`, `manifest.csv` | Screen IDs, expression context, marker inventory, prepared-release file manifest | 24,052 B combined (about 23.5 KiB) | `altair/` |
 | POSH | `morphology_124.pq` | Published processed 124-gene CRISPR KO morphology profile table; no imagery | 4,686,984 B (4.47 MiB) | `posh/` |
-| Aconcagua | `interphase/aggregated_data.h5ad` | HeLa aggregate feature profiles, interphase population | 5,428,564 B (5.18 MiB) | `aconcagua/` |
-| Aconcagua | `mitotic/aggregated_data.h5ad` | HeLa aggregate feature profiles, mitotic population | 5,423,724 B (5.17 MiB) | `aconcagua/` |
+| Aconcagua | `interphase/aggregated_data.h5ad` | HeLa aggregate feature profiles, interphase population | 5,428,564 B (5.18 MiB) | `aconcagua/interphase_aggregated_data.h5ad` |
+| Aconcagua | `mitotic/aggregated_data.h5ad` | HeLa aggregate feature profiles, mitotic population | 5,423,724 B (5.17 MiB) | `aconcagua/mitotic_aggregated_data.h5ad` |
 | Aconcagua metadata | `experimental_metadata.yaml`, `feature_definitions.csv`, `perturbation_library.csv` | Experiment description, feature names/definitions, guide and target library | 1,809,436 B combined (1.73 MiB) | `aconcagua/metadata/` |
 
 The Aconcagua perturbation library contains 20,445 records and 5,299 distinct gene symbols in the copy already inspected for this project. It includes both targeting and control guides.
 
-Known-size core network transfer is about **2,103,197,692 bytes (1.96 GiB)**. Including the extracted Biohub_OPS0077 profiles, local storage is about **2,199,511,875 bytes (2.05 GiB)**. The 4i subset is already a member of the marker ZIP, so its extraction does not increase the download total. Exact sizes vary if source files are updated.
+Known-size core network transfer is about **5,235,632,383 bytes (5.24 GB / 4.88 GiB)**, including `phase_guide_x_screen.h5ad`. Including the extracted Biohub_OPS0077 profiles, local storage is about **5,331,946,566 bytes (5.33 GB / 4.97 GiB)**. The 4i subset is already a member of the marker ZIP, so its extraction does not increase the download total. Exact sizes vary if source files are updated.
 
 ## Participant download selections
 
@@ -52,7 +55,7 @@ See [the measured Biohub_OPS0077 checks](OPS0077_QC.md) for the successful downl
 
 ## Contents and analysis limits
 
-- Altair phase/marker prepared tables are guide-level and include screen and target metadata. Marker archive contents include profile-level tables; it is not an image archive.
+- Altair `phase_guide.h5ad` is per guide; `phase_guide_x_screen.h5ad` is per guide and screen. Both carry guide/target annotations and phase feature matrices. Marker archive contents include profile-level tables; it is not an image archive.
 - The Biohub_OPS0077 subset uses screen-specific guide-by-screen summaries. It is suitable for profile-level comparisons against Altair phase guides for the same perturbations. The ten corresponding `*_cells_n100.h5ad` files hold sampled cell-level measurements and are much larger; this repo does not download them by default.
 - POSH Zenodo profiles are processed numeric profiles. Inspect the Parquet schema and library identifiers with `run_quality_checks.py` before treating their rows as guide-level or assuming their target column is a gene symbol.
 - Aconcagua `aggregated_data.h5ad` is a gene/perturbation aggregate representation, not one row per guide. `perturbation_library.csv` maps target symbols to guide/barcode records, but this mapping cannot split an already gene-aggregated profile back into guide-specific profiles.
